@@ -1,0 +1,40 @@
+{
+	"info": {
+		"_postman_id": "c9138b83-e128-4e72-8135-d3e559c477c4",
+		"name": "moebelhaus tester",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "53661070"
+	},
+	"item": [
+		{
+			"name": "File Upload Test",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "data",
+							"type": "file",
+							"src": []
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:5678/webhook-test/moebelhaus-mapper",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5678",
+					"path": [
+						"webhook-test",
+						"moebelhaus-mapper"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

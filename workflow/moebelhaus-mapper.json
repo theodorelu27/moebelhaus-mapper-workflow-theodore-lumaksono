@@ -1,0 +1,787 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "moebelhaus-mapper",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1376,
+        176
+      ],
+      "id": "5092e325-39c9-4b21-842b-ad4f31c7c76d",
+      "name": "Webhook",
+      "webhookId": "66b82d45-fc4d-4571-9320-1f827ee2ac2e"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"error\": \"Unsupported file type. Please upload a PDF or Excel file.\"\n}",
+        "options": {
+          "responseCode": 415
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -848,
+        224
+      ],
+      "id": "f403e0e8-0c8b-4765-9fd1-b27c4c65ad26",
+      "name": "Error Response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "edd327fe-7355-4b46-bd43-80e56538f8a6",
+              "leftValue": "={{ $binary.data.fileExtension }}",
+              "rightValue": "pdf",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1184,
+        -48
+      ],
+      "id": "6b925f06-c538-46e0-b3b8-07bbbfaf3d80",
+      "name": "IF PDF"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1b324429-2d9e-4bd3-8ddf-e7b3abdfa632",
+              "leftValue": "={{ $binary.data.fileExtension }}",
+              "rightValue": "xlsx",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1040,
+        48
+      ],
+      "id": "2209794e-3289-4591-8c3f-fb4c853edc06",
+      "name": "IF XLSX"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -848,
+        32
+      ],
+      "id": "6c03eac9-6eb0-488c-92cb-352f99514663",
+      "name": "XLSX Extraction"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -848,
+        -192
+      ],
+      "id": "7b34b7a1-269d-49e7-bbf9-48ade26f35f5",
+      "name": "PDF Extraction"
+    },
+    {
+      "parameters": {
+        "respondWith": "binary",
+        "responseDataSource": "set",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Disposition",
+                "value": "attachment; filename=\"zielformat-output.xlsx\""
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1456,
+        256
+      ],
+      "id": "660a8995-c8d4-4b27-a7e5-bf5c9ed3ee2b",
+      "name": "Return Ziel-Tabelle"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nlet extractedText = \"\";\n\n// PDF path - single item with text field\nif (items[0].json.text) {\n  extractedText = items[0].json.text;\n}\n// XLSX path - multiple row items, concatenate into one\nelse if (items[0].json.data || typeof items[0].json === 'object') {\n  const allRows = items.map(item => JSON.stringify(item.json));\n  extractedText = allRows.join(\"\\n\");\n}\n// Fallback\nelse {\n  extractedText = JSON.stringify(items[0].json, null, 2);\n}\n\nextractedText = extractedText.trim();\n\n// Deduplicate repeated content blocks\nfunction hashString(str) {\n  let hash = 0;\n  for (let i = 0; i < str.length; i++) {\n    hash = ((hash << 5) - hash) + str.charCodeAt(i);\n    hash |= 0;\n  }\n  return hash;\n}\n\nconst chunks = extractedText.split(/\\n{2,}/);\nconst seenHashes = new Set();\nconst uniqueChunks = chunks.filter(chunk => {\n  const h = hashString(chunk.trim());\n  if (seenHashes.has(h)) return false;\n  seenHashes.add(h);\n  return true;\n});\n\nextractedText = uniqueChunks.join(\"\\n\\n\");\n\n// Filter relevant lines\n\nconst relevantLines = uniqueChunks.join(\"\\n\\n\")\n  .split(\"\\n\")\n  .filter(line => {\n    line = line.trim();\n    if (line.length < 3) return false;\n    if (line.match(/^■\\s*/)) return true; // bullet features\n    if (line.match(/\\d/)) return true;     // anything with numbers\n    if (line.match(/EAN|mm|kg|cm|GmbH|desk|oak|beech/i)) return true;\n    return line.length > 8;               // skip very short layout fragments\n  })\n  .join(\"\\n\");\n\nextractedText = relevantLines;\n\n// Escape for JSON Injection\nextractedText = extractedText\n  .trim()\n  .replace(/\\\\/g, \"\\\\\\\\\")\n  .replace(/\"/g, '\\\\\"')\n  .replace(/\\n/g, \"\\\\n\")\n  .replace(/\\r/g, \"\\\\r\")\n  .replace(/\\t/g, \"\\\\t\");\n\nreturn [{\n  json: { extractedText }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        -80
+      ],
+      "id": "3a222e08-3f03-4938-95a3-a6d06038a5cb",
+      "name": "Normalize Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst extractedText = item.json.extractedText;\n\nconst systemPrompt = \"You are a data extraction assistant. Extract shared product information from this furniture supplier document.\\n\\nReturn ONLY a single JSON object, no array, no markdown, no explanation.\\n\\nFIELDS:\\n- ArtBez: product title only (e.g. MAJA Computer desk 4052)\\n- Hersteller: full company name including any prefix before GmbH/KG (e.g. MAJA-WERK Manfred Jarosch GmbH & Co. KG)\\n- Breite_mm: first number from 'W x H x D mm' line, number only\\n- Hoehe_mm: second number from 'W x H x D mm' line, number only\\n- Tiefe_mm: third number from 'W x H x D mm' line, number only\\n- Material: materials from bullet features as a single comma-separated string (e.g. wood, smoked glass, ABS, melamine)\\n- Artikelfakten: ONLY lines starting with ■ symbol, strip the symbol, join with semicolons, exclude company names and dimension lines\\n- Artikelbeschreibung: descriptive paragraph or marketing text provided by the manufacturer/supplier about the product. If the document only contains technical specs and feature lists without a dedicated description, set to null\\n- Gewicht_kg: NET product weight (unpackaged). If all weights in the document appear under or near a PACKING DATA section, set to null. Only extract if a weight is explicitly stated outside of packing context\\n- Packstueck_Gewicht_kg: sum of ALL package weights found (e.g. 33 + 38.5 = 71.5), number only\\n- Packstuck_Breite_cm: first number from smallest 'X x Y x Z cm' line, number only\\n- Packstuck_Tiefe_cm: second number from that line, number only\\n- Packstuck_Hoehe_cm: third number from that line, number only\\n\\nReturn ONLY a JSON object, no other text.\";\n\nconst body = {\n  model: \"deepseek-r1:7b\",\n  messages: [\n    { role: \"system\", content: systemPrompt },\n    { role: \"user\", content: extractedText }\n  ],\n  temperature: 0.1,\n  stream: false\n};\n\nreturn [{ json: { requestBody: JSON.stringify(body) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        -192
+      ],
+      "id": "4221f32b-dad2-44d6-919e-9e00633919ad",
+      "name": "Extract Shared Prompt Builder"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst extractedText = item.json.extractedText;\n\nconst systemPrompt = \"You are a data extraction assistant. Extract color variant information from this furniture supplier document.\\n\\nRULES:\\n- Extract ONLY information explicitly present in the document\\n- Do NOT infer or guess missing information, set to null\\n- Respond with valid JSON only, no markdown, no explanations, no code blocks\\n- Return a JSON array with one object per color variant\\n- Each color variant has a UNIQUE Hersteller_Artikelnummer — never assign the same article number to two different variants. The article number appears on the line directly adjacent to the color name and EAN\\n\\nFor each variant extract:\\n- EAN: 13 digit barcode number\\n- Farbe: color name (e.g. Sonoma oak, natural beech)\\n- Hersteller_Artikelnummer: short code next to color name, format digits space digits (e.g. 4052 5525), NOT the EAN, must be unique per variant\\n\\nReturn ONLY a JSON array with one object per color variant, no other text.\";\n\nconst body = {\n  model: \"deepseek-r1:7b\",\n  messages: [\n    { role: \"system\", content: systemPrompt },\n    { role: \"user\", content: extractedText }\n  ],\n  temperature: 0.1,\n  stream: false\n};\n\nreturn [{ json: { requestBody: JSON.stringify(body) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        0
+      ],
+      "id": "548d0acc-30e8-4427-856d-614fa196ac47",
+      "name": "Extract Variant Prompt Builder"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst content = item.json.choices[0].message.content;\n\nconst cleanContent = content\n  .replace(/<think>[\\s\\S]*?<\\/think>/g, \"\")\n  .replace(/^```json\\s*/i, \"\")\n  .replace(/^```\\s*/i, \"\")\n  .replace(/```\\s*$/i, \"\")\n  .trim();\n\nlet extracted;\ntry {\n  extracted = JSON.parse(cleanContent);\n} catch (e) {\n  // Attempt to fix common DeepSeek JSON errors\n  const fixed = cleanContent\n    .replace(/}\\s*\\]\\s*\\]/g, \"}]\")     // fixes }]] → }]\n    .replace(/\\]\\s*\\]/g, \"]\")           // fixes ]] → ]\n    .replace(/,\\s*\\]/g, \"]\")            // fixes trailing commas\n    .replace(/,\\s*\\}/g, \"}\");           // fixes trailing commas in objects\n  try {\n    extracted = JSON.parse(fixed);\n  } catch (e2) {\n    return [{\n      json: {\n        error: \"Failed to parse DeepSeek response\",\n        rawContent: cleanContent\n      }\n    }];\n  }\n}\n\nif (Array.isArray(extracted)) {\n  return extracted.map(item => ({ json: item }));\n}\nreturn [{ json: extracted }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        -192
+      ],
+      "id": "ae16b747-cfbb-4dfb-a057-04b0ed0707f0",
+      "name": "Parse Shared Response"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama:11434/v1/chat/completions",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/json",
+        "body": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        112,
+        0
+      ],
+      "id": "32955906-8a9e-4521-9aad-7d155493b683",
+      "name": "DeepSeek Variant Extraction"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama:11434/v1/chat/completions",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/json",
+        "body": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        112,
+        -192
+      ],
+      "id": "51895ffd-0d36-4cfa-819f-ef09025a8521",
+      "name": "DeepSeek Shared Extraction"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst content = item.json.choices[0].message.content;\n\nconst clean = content\n  .replace(/<think>[\\s\\S]*?<\\/think>/g, \"\")\n  .replace(/^```json\\s*/i, \"\")\n  .replace(/^```\\s*/i, \"\")\n  .replace(/```\\s*$/i, \"\")\n  .trim();\n\nlet extracted;\ntry {\n  extracted = JSON.parse(clean);\n} catch (e) {\n  const fixed = clean\n    .replace(/}\\s*\\]\\s*\\]/g, \"}]\")\n    .replace(/\\]\\s*\\]/g, \"]\")\n    .replace(/,\\s*\\]/g, \"]\")\n    .replace(/,\\s*\\}/g, \"}\");\n  try {\n    extracted = JSON.parse(fixed);\n  } catch (e2) {\n    return [{\n      json: {\n        error: \"Failed to parse variant response\",\n        rawContent: clean\n      }\n    }];\n  }\n}\n\n// Critical — return ALL variants as separate items\nif (Array.isArray(extracted)) {\n  return extracted.map(v => ({ json: v }));\n}\nreturn [{ json: extracted }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        0
+      ],
+      "id": "1c4c749b-8ec4-41ca-9f1c-1363c27c5b27",
+      "name": "Parse Variant Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst allHeaders = items[0].json.headers ?? [];\n\nconst findField = (obj, ...keywords) => {\n  const keys = Object.keys(obj);\n  for (const keyword of keywords) {\n    const match = keys.find(k =>\n      k.toLowerCase().includes(keyword.toLowerCase())\n    );\n    if (match && obj[match] !== null && obj[match] !== undefined && obj[match] !== \"\") {\n      return obj[match];\n    }\n  }\n  return null;\n};\n\nconst alreadyHandled = [\n  'ArtBez', 'Artikelbezeichnung', 'Artikelbeschreibung', 'Produktbeschreibung',\n  'Hersteller', 'Hersteller_Artikelnummer', 'Artikelnummer',\n  'Herstellerland', 'Artikelfakten', 'Besonderheiten',\n  'Packstueck_Gewicht_kg', 'Gewicht_kg',\n  'EAN', 'Farbe', 'Material',\n  'Breite_mm', 'Breite (mm)', 'Hoehe_mm', 'Höhe (mm)',\n  'Tiefe_mm', 'Tiefe (mm)', 'Gewicht netto (kg)',\n  'Packstuck_Breite_cm', 'Verpackung Breite (cm)',\n  'Packstuck_Tiefe_cm', 'Verpackung Tiefe (cm)',\n  'Packstuck_Hoehe_cm', 'Verpackung Höhe (cm)',\n  'Verpackung Gewicht (kg)',\n  'headers', 'remainingFields', 'extractedText'\n];\n\nconst rows = items.map(item => {\n  const v = item.json;\n\n  const breite = v.Breite_mm ?? findField(v, 'breite');\n  const hoehe = v.Hoehe_mm ?? findField(v, 'höhe', 'hoehe', 'height');\n  const tiefe = v.Tiefe_mm ?? findField(v, 'tiefe', 'depth');\n  const gewicht = v.Gewicht_kg ?? findField(v, 'gewicht netto', 'netto', 'net weight');\n  const artbez = v.ArtBez ?? findField(v, 'artikelbezeichnung', 'bezeichnung', 'title');\n  const artikelbeschreibung = v.Artikelbeschreibung ?? findField(v, 'produktbeschreibung', 'beschreibung', 'description');\n  const packstueck = v.Packstueck_Gewicht_kg ?? findField(v, 'verpackung gewicht', 'pack weight');\n  const packBreite = v.Packstuck_Breite_cm ?? findField(v, 'verpackung breite');\n  const packTiefe = v.Packstuck_Tiefe_cm ?? findField(v, 'verpackung tiefe');\n  const packHoehe = v.Packstuck_Hoehe_cm ?? findField(v, 'verpackung höhe', 'verpackung hoehe');\n  const hersteller = v.Hersteller ?? findField(v, 'hersteller');\n  const herstellerland = v.Herstellerland ?? findField(v, 'herstellerland', 'land', 'country');\n  const farbe = v.Farbe ?? findField(v, 'farbe', 'color', 'colour');\n  const material = v.Material ?? findField(v, 'material');\n  const ean = v.EAN ?? findField(v, 'ean');\n  const artikelnummer = v.Hersteller_Artikelnummer ?? findField(v, 'artikelnummer');\n  const artikelfakten = v.Artikelfakten ?? findField(v, 'artikelfakten', 'besonderheiten', 'features');\n\n  const rowArray = new Array(allHeaders.length).fill(\"\");\n\n  const set = (colName, value) => {\n    if (value === null || value === undefined || value === \"\") return;\n    const idx = allHeaders.indexOf(colName);\n    if (idx !== -1) rowArray[idx] = value;\n  };\n\n  set('ArtBez', artbez);\n  set('Artikelbeschreibung Hersteller/Lieferant', artikelbeschreibung);\n  set('Hersteller', hersteller);\n  set('Hersteller-Artikelnummer', artikelnummer);\n  set('Herstellerland', herstellerland);\n  set('Artikelfakten (Stichpunkte)', artikelfakten);\n  set('Packstücke Gesamt-Gewicht', packstueck);\n  set('Gewicht', gewicht);\n\n  if (ean) { rowArray[0] = ean; rowArray[96] = ean; }\n  if (farbe) { rowArray[101] = farbe; rowArray[181] = farbe; }\n  if (material) {\n    const mat = Array.isArray(material) ? material.join(\", \") : material;\n    rowArray[118] = mat; rowArray[187] = mat;\n  }\n  // Article dimensions — correct positions\n  if (breite) rowArray[94] = breite;    // article Breite mm\n  if (hoehe) rowArray[110] = hoehe;     // article Höhe mm  \n  if (tiefe) rowArray[130] = tiefe;     // article Tiefe mm\n  \n  // Packaging dimensions — correct positions\n  if (packBreite) rowArray[59] = packBreite;   // packaging Breite cm\n  if (packTiefe) rowArray[62] = packTiefe;     // packaging Tiefe cm\n\n  Object.keys(v).forEach(field => {\n    if (alreadyHandled.includes(field)) return;\n    const value = v[field];\n    if (value === null || value === undefined || value === \"\") return;\n    const idx = allHeaders.indexOf(field);\n    if (idx !== -1) rowArray[idx] = value;\n  });\n\n  const rowObj = {};\n  allHeaders.forEach((header, i) => {\n    const key = rowObj.hasOwnProperty(header) ? `${header}_col${i}` : header;\n    rowObj[key] = rowArray[i];\n  });\n\n  return { json: rowObj };\n});\n\nreturn rows;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        256
+      ],
+      "id": "63d01a8f-7d63-42c8-9c57-000c2b04e359",
+      "name": "XLSX Content Builder"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/.n8n-files/zielformat-headers.json",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        -1168,
+        432
+      ],
+      "id": "f609828d-4318-42be-b4bb-d124f5a0d5af",
+      "name": "Read Headers"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\n// Extract from JSON outputs the parsed array in item.json.data\nconst headers = Array.isArray(item.json.data) ? item.json.data : Object.values(item.json.data);\nreturn [{ json: { headers } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        624
+      ],
+      "id": "445c1a1a-534d-4cb6-9a15-c8b4da9c0374",
+      "name": "Parse Headers"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\n\nconst furnitureRelevant = [\n  'Selbstaufbau möglich',\n  'Anzahl Schubkästen (Stk)',\n  'Anzahl Türen (Stk)',\n  'Anzahl offene Fächer (Stk)',\n  'Anzahl Einlegeböden (Stk)',\n  'Schubkastenführung',\n  'Rückwand ',\n  'Holz',\n  'Holzwerkstoff',\n  'Glas',\n  'Beschreibungtext (kurz)',\n  'Warengruppe',\n  'Stil',\n  'Gestellfarbe',\n  'Gestellmaterial',\n  'Anzahl Packstücke (Kollis)',\n  'Bruchgefahr',\n  'Lieferzustand',\n  'Montagehinweis für Endkunden',\n  'Montagezeit Endkunde (min)',\n  'Anzahl Montagepersonen (Stk)',\n  'Pflege - und Gebrauchshinweis',\n  'Produkteigenschaften',\n  'Besonderheiten Kastenmöbel',\n  'Mehrteilig',\n  'Anzahl Griffe (Stk)',\n  'Anzahl Füße (Stk) ',\n  'Fußform',\n  'Fußhöhe (cm)',\n  'höhenverstellbare Füße'\n];\n\nreturn [{\n  json: {\n    remainingFields: furnitureRelevant,\n    extractedText: item.json.extractedText,  // forward through\n    headers: item.json.headers               // forward through\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        256
+      ],
+      "id": "318bcf29-a3b8-4d03-931f-681722f5640e",
+      "name": "Extract Remaining Headers"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst content = item.json.choices[0].message.content;\n\nconst clean = content\n  .replace(/<think>[\\s\\S]*?<\\/think>/g, \"\")\n  .replace(/^```json\\s*/i, \"\")\n  .replace(/^```\\s*/i, \"\")\n  .replace(/```\\s*$/i, \"\")\n  .trim();\n\nlet extracted = {};\ntry {\n  const parsed = JSON.parse(clean);\n  extracted = Array.isArray(parsed) ? parsed[0] : parsed;\n  // Remove null values — Pass 3 should only forward fields with actual values\n  Object.keys(extracted).forEach(key => {\n    if (extracted[key] === null || extracted[key] === undefined) {\n      delete extracted[key];\n    }\n  });\n} catch(e) {\n  extracted = {};\n}\n\nreturn [{ json: extracted }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        256
+      ],
+      "id": "b03c8166-d36f-48ea-a4be-38db20debba2",
+      "name": "Parse Remaining Headers"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama:11434/v1/chat/completions",
+        "sendBody": true,
+        "contentType": "=raw",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "rawContentType": "text/json",
+        "body": "={{ $json.requestBody }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        128,
+        256
+      ],
+      "id": "3c8d1248-1555-483b-ae27-184128916940",
+      "name": "DeepSeek Remainder Extraction"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        768,
+        96
+      ],
+      "id": "185183b7-d678-4cf7-8b8b-457d32743db0",
+      "name": "Merge with Remaining Fields"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -512,
+        256
+      ],
+      "id": "6115a298-f66d-4b19-9138-6c8a842b1285",
+      "name": "Merge Headers"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        608,
+        -80
+      ],
+      "id": "c214605d-6fd3-4d71-82e3-c5ab33da467d",
+      "name": "Merge Known Specialized FIelds"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst extractedText = item.json.extractedText;\nconst remainingFields = item.json.remainingFields;\n\nconst fieldList = remainingFields.join('\\n- ');\n\nconst systemPrompt = `You are a data extraction assistant for a Möbelhaus ERP system.\\n\\nExtract ONLY information explicitly present in the document for the fields listed below.\\nReturn a single JSON object with ONLY the fields that have actual values. Omit fields with no data entirely.\\nDo NOT infer or guess. Return valid JSON only, no markdown, no explanation.\\n\\nFIELDS TO EXTRACT:\\n- ${fieldList}\\n\\nFor boolean fields use 'ja' or 'nein'.\\nFor numeric fields extract numbers only.\\nReturn ONLY a JSON object, no other text.`;\n\nconst body = {\n  model: \"deepseek-r1:7b\",\n  messages: [\n    { role: \"system\", content: systemPrompt },\n    { role: \"user\", content: extractedText }\n  ],\n  temperature: 0.1,\n  stream: false\n};\n\nreturn [{ json: { requestBody: JSON.stringify(body) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        256
+      ],
+      "id": "348f5174-2a89-457f-92d9-c4ac154f6c8a",
+      "name": "Extract Remaining Headers Prompt Builder"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        960,
+        256
+      ],
+      "id": "aea686f7-6d13-433c-b615-5724c7f27991",
+      "name": "Merge with headers"
+    },
+    {
+      "parameters": {
+        "operation": "fromJson",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -1024,
+        624
+      ],
+      "id": "f5f174ce-7a0a-40ea-a4ca-ecf8116e9398",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1296,
+        256
+      ],
+      "id": "970f09b3-e444-4d27-bc16-2c79d2667b79",
+      "name": "Convert to File"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read Headers",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF PDF": {
+      "main": [
+        [
+          {
+            "node": "PDF Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF XLSX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF XLSX": {
+      "main": [
+        [
+          {
+            "node": "XLSX Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF Extraction": {
+      "main": [
+        [
+          {
+            "node": "Normalize Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "XLSX Extraction": {
+      "main": [
+        [
+          {
+            "node": "Normalize Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Data": {
+      "main": [
+        [
+          {
+            "node": "Extract Shared Prompt Builder",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract Variant Prompt Builder",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Headers",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Extract Shared Prompt Builder": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek Shared Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Shared Response": {
+      "main": [
+        [
+          {
+            "node": "Merge Known Specialized FIelds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Shared Extraction": {
+      "main": [
+        [
+          {
+            "node": "Parse Shared Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Variant Prompt Builder": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek Variant Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Variant Extraction": {
+      "main": [
+        [
+          {
+            "node": "Parse Variant Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Variant Response": {
+      "main": [
+        [
+          {
+            "node": "Merge Known Specialized FIelds",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "XLSX Content Builder": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Headers": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Headers": {
+      "main": [
+        [
+          {
+            "node": "Merge Headers",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge with headers",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Extract Remaining Headers": {
+      "main": [
+        [
+          {
+            "node": "Extract Remaining Headers Prompt Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Remainder Extraction": {
+      "main": [
+        [
+          {
+            "node": "Parse Remaining Headers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Remaining Headers": {
+      "main": [
+        [
+          {
+            "node": "Merge with Remaining Fields",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge with Remaining Fields": {
+      "main": [
+        [
+          {
+            "node": "Merge with headers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Headers": {
+      "main": [
+        [
+          {
+            "node": "Extract Remaining Headers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Known Specialized FIelds": {
+      "main": [
+        [
+          {
+            "node": "Merge with Remaining Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Remaining Headers Prompt Builder": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek Remainder Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge with headers": {
+      "main": [
+        [
+          {
+            "node": "XLSX Content Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Parse Headers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Return Ziel-Tabelle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "ec1fb32e-d95f-448c-82f1-33f89c871998",
+  "meta": {
+    "instanceId": "2de67527e008ddaa4d31ddef58a4356379ef3a442aa14ea52dee9ce39c86572d"
+  },
+  "id": "TY01bk3okBnV7xmv",
+  "tags": []
+}
