@@ -1,10 +1,9 @@
 ## Kontext
 Dieses Projekt entstand im Rahmen eines Take-Home-Assessments. Der n8n-Workflow 
-zentralisiert Kundenkontakte aus drei Kanälen (Webhook, E-Mail/IMAP und Audio) 
-und verarbeitet sie mit einem vollständig lokal betriebenen KI-Stack: Pyannote 
-übernimmt die Sprecher-Diarisierung und Transkription, Mistral 7B via Ollama 
-analysiert die Stimmung und erkennt kritische Fälle in Echtzeit. Alle Dienste 
-laufen selbst gehostet via Docker Compose – ohne externe API-Aufrufe.
+extrahiert Produktdaten aus Lieferantendokumenten (PDF oder Excel) mithilfe von 
+DeepSeek-R1 7B via Ollama und mappt sie automatisch in ein standardisiertes 
+ERP-Zielformat mit 338 Spalten. Mit GPU-Beschleunigung dauert die Verarbeitung 
+ca. 30 Sekunden pro Dokument – gegenüber ca. 3 Minuten im CPU-Betrieb.
 
 # Möbelhaus Artikeldaten-Mapper
 
