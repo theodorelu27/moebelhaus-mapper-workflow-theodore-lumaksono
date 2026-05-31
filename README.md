@@ -7,8 +7,7 @@ Ein n8n-Workflow, der Artikelstammdaten aus Möbelhersteller-Dokumenten (PDF-Pro
 Dieses Projekt entstand im Rahmen eines Take-Home-Assessments. Der n8n-Workflow 
 extrahiert Produktdaten aus Lieferantendokumenten (PDF oder Excel) mithilfe von 
 DeepSeek-R1 7B via Ollama und mappt sie automatisch in ein standardisiertes 
-ERP-Zielformat mit 338 Spalten. Mit GPU-Beschleunigung dauert die Verarbeitung 
-ca. 30 Sekunden pro Dokument – gegenüber ca. 3 Minuten im CPU-Betrieb.
+ERP-Zielformat mit 338 Spalten.
 
 ## Voraussetzungen
 
